@@ -84,14 +84,14 @@ func newVideoReplayVideo(
 
 	// Create a context for the camera’s lifetime
 
-	ctx, cancelFunc := context.WithCancel(context.Background())
+	mainCtx, cancelFunc := context.WithCancel(context.Background())
 
 	cam := &videoReplayVideo{
 		name:       rawConf.ResourceName(),
 		logger:     logger,
 		cfg:        conf,
 		cancelFunc: cancelFunc,
-		mainCtx:    ctx,
+		mainCtx:    mainCtx,
 
 		// We'll open the video + start the loop below
 		currentFrame: gocv.NewMat(),
@@ -117,7 +117,7 @@ func (s *videoReplayVideo) openAndStartLoop(videoPath string) error {
 	}
 	// Close existing capture if any
 	if s.videoCapture != nil {
-		s.videoCapture.Close()
+		_ = s.videoCapture.Close()
 		s.videoCapture = nil
 	}
 
@@ -134,15 +134,15 @@ func (s *videoReplayVideo) openAndStartLoop(videoPath string) error {
 	// Read initial frame
 	firstFrame := gocv.NewMat()
 	if ok := cap.Read(&firstFrame); !ok || firstFrame.Empty() {
-		firstFrame.Close()
-		cap.Close()
+		_ = firstFrame.Close()
+		_ = cap.Close()
 		return fmt.Errorf("failed to read initial frame from %q", videoPath)
 	}
 
 	// Store in struct
 	s.frameMutex.Lock()
 	if !s.currentFrame.Empty() {
-		s.currentFrame.Close()
+		_ = s.currentFrame.Close()
 	}
 	s.currentFrame = firstFrame
 	s.currentFrameTime = time.Now()
@@ -178,13 +178,13 @@ func (s *videoReplayVideo) frameUpdateLoop(ctx context.Context, fps float64) {
 			if ok := s.videoCapture.Read(&newFrame); !ok || newFrame.Empty() {
 				s.logger.Infof("[frameUpdateLoop] End of file or invalid => reset to 0 for %q", s.name)
 				s.videoCapture.Set(gocv.VideoCapturePosFrames, 0)
-				newFrame.Close()
+				_ = newFrame.Close()
 				newFrame = gocv.NewMat()
 				s.videoCapture.Read(&newFrame)
 			}
 			now := time.Now()
 			s.frameMutex.Lock()
-			s.currentFrame.Close()
+			_ = s.currentFrame.Close()
 			s.currentFrame = newFrame
 			s.currentFrameTime = now
 			s.frameMutex.Unlock()
@@ -284,11 +284,11 @@ func (s *videoReplayVideo) Close(ctx context.Context) error {
 	}
 	// close capture
 	if s.videoCapture != nil {
-		s.videoCapture.Close()
+		_ = s.videoCapture.Close()
 	}
 	// free last frame
 	s.frameMutex.Lock()
-	s.currentFrame.Close()
+	_ = s.currentFrame.Close()
 	s.frameMutex.Unlock()
 	// end main resource context
 	s.cancelFunc()
