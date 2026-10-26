@@ -29,6 +29,12 @@ jobs:
       # actions/checkout@v7.0.1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
+      # The container runs as root while the workspace is owned by the runner
+      # user, so git (used by go's VCS stamping and the tidy check) refuses
+      # the checkout as dubious ownership without this.
+      - name: Trust the workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
       # actions/setup-go@v7.0.0
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
@@ -55,6 +61,12 @@ jobs:
     steps:
       # actions/checkout@v7.0.1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      # The container runs as root while the workspace is owned by the runner
+      # user, so git (used by go's VCS stamping and the tidy check) refuses
+      # the checkout as dubious ownership without this.
+      - name: Trust the workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       # actions/setup-go@v7.0.0
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
