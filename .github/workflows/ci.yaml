@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # The checks are spelled out here: the Makefile has no lint target, and its
+  # format target runs `gofmt -w -s`, which rewrites files instead of failing.
+  #
+  # Both jobs run in gocv's OpenCV image because gocv v0.40 needs OpenCV 4.11
+  # with the contrib modules, and Ubuntu's apt packages are 4.6. The image
+  # ships an older Go, so setup-go still installs the go.mod version.
+  lint:
+    name: Lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    # ghcr.io/hybridgroup/opencv:4.11.0
+    container: ghcr.io/hybridgroup/opencv@sha256:c4c8f0c1128902ff82de14dae53fc1ab23b5e07ef6c0037a6fda3e29d4ac9515
+    steps:
+      # actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      # The container runs as root while the workspace is owned by the runner
+      # user, so git (used by go's VCS stamping and the tidy check) refuses
+      # the checkout as dubious ownership without this.
+      - name: Trust the workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      # actions/setup-go@v7.0.0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: go.mod
+
+      # golangci/golangci-lint-action@v9.3.0
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a
+        with:
+          version: v2.14.0
+
+      - name: go mod tidy
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+
+  # Builds with `go build ./...` rather than `make build`: that target bumps rdk
+  # to latest, rewrites files with gofmt, and links OpenCV statically.
+  test:
+    name: Test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    # ghcr.io/hybridgroup/opencv:4.11.0
+    container: ghcr.io/hybridgroup/opencv@sha256:c4c8f0c1128902ff82de14dae53fc1ab23b5e07ef6c0037a6fda3e29d4ac9515
+    steps:
+      # actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      # The container runs as root while the workspace is owned by the runner
+      # user, so git (used by go's VCS stamping and the tidy check) refuses
+      # the checkout as dubious ownership without this.
+      - name: Trust the workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      # actions/setup-go@v7.0.0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: go.mod
+
+      - name: Build
+        run: go build ./...
+
+      # An explicit -timeout so a test blocked on hardware that isn't there
+      # fails fast instead of holding the runner for Go's 10-minute default.
+      - name: Test
+        run: go test -race -timeout 5m ./...
